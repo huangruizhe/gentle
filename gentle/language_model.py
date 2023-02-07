@@ -94,6 +94,98 @@ def make_bigram_lm_fst(word_sequences, **kwargs):
 
     return output.encode()
 
+def make_transcript_fst(word_sequences, **kwargs):
+    '''
+    Use the given token sequence to make a bigram language model
+    in OpenFST plain text format.
+
+    When the "conservative" flag is set, an [oov] is interleaved
+    between successive words.
+
+    When the "disfluency" flag is set, a small set of disfluencies is
+    interleaved between successive words
+
+    `Word sequence` is a list of lists, each valid as a start
+    '''
+
+    if len(word_sequences) == 0 or type(word_sequences[0]) != list:
+        word_sequences = [word_sequences]
+
+    conservative = kwargs['conservative'] if 'conservative' in kwargs else False
+    disfluency = kwargs['disfluency'] if 'disfluency' in kwargs else False
+    disfluencies = kwargs['disfluencies'] if 'disfluencies' in kwargs else []
+
+    bigrams = {OOV_TERM: set([OOV_TERM])}
+
+    cur_node_id = 0
+    next_node_id = 0
+    end_node_id = sum([len(word_sequence) - 1 for word_sequence in word_sequences]) + 1
+    next_available_node_id = 1
+    output = []
+    start_node_flag = True
+    end_node_flag = True
+    for word_sequence in word_sequences:
+        if len(word_sequence) == 0:
+            continue
+
+        cur_node_id = 0  # start node
+        if start_node_flag:
+            if disfluency:
+                for dis in disfluencies:
+                    output.append((cur_node_id, cur_node_id, dis, dis, 0.0))
+            
+            if conservative:
+                output.append((cur_node_id, cur_node_id, OOV_TERM, OOV_TERM, 0.0))
+
+            start_node_flag = False
+        
+        if len(word_sequence) == 1:
+            next_node_id = end_node_id
+        else:
+            next_node_id = next_available_node_id
+            next_available_node_id += 1
+        weight = 2.0
+        for i, word in enumerate(word_sequence):
+            output.append((cur_node_id, next_node_id, word, word, weight))
+            output.append((cur_node_id, next_node_id, OOV_TERM, OOV_TERM, 0.0))
+            # TODO: <eps>?
+
+            if i == len(word_sequence) - 1:
+                break
+            elif i == len(word_sequence) - 2:
+                cur_node_id = next_node_id
+                next_node_id = end_node_id
+            else:
+                cur_node_id = next_node_id
+                next_node_id = next_available_node_id
+                next_available_node_id += 1
+
+            if disfluency:
+                for dis in disfluencies:
+                    output.append((cur_node_id, cur_node_id, dis, dis, 0.0))
+            
+            if conservative:
+                output.append((cur_node_id, cur_node_id, OOV_TERM, OOV_TERM, 0.0))
+        
+        if end_node_flag:
+            if disfluency:
+                for dis in disfluencies:
+                    output.append((end_node_id, end_node_id, dis, dis, 0.0))
+            
+            if conservative:
+                output.append((end_node_id, end_node_id, OOV_TERM, OOV_TERM, 0.0))
+
+            end_node_flag = False
+
+    assert end_node_id == next_available_node_id, f"{end_node_id} vs {next_available_node_id}"
+
+    output.sort()
+
+    output_str = "\n".join(map(lambda x: f"{x[0]} {x[1]} {x[2]} {x[3]} {x[4]}", output))
+    output_str += f"\n{end_node_id} 0\n"
+
+    return output_str.encode()
+
 def make_bigram_language_model(kaldi_seq, proto_langdir, **kwargs):
     """Generates a language model to fit the text.
 
@@ -106,13 +198,20 @@ def make_bigram_language_model(kaldi_seq, proto_langdir, **kwargs):
 
     # Generate a textual FST
     txt_fst = make_bigram_lm_fst(kaldi_seq, **kwargs)
+    # txt_fst = make_transcript_fst(kaldi_seq, **kwargs)
     txt_fst_file = tempfile.NamedTemporaryFile(delete=False)
     txt_fst_file.write(txt_fst)
     txt_fst_file.close()
+    # subprocess.check_output(["cp", txt_fst_file.name, "temp/1.fst"])
 
     hclg_filename = tempfile.mktemp(suffix='_HCLG.fst')
+    # hclg_filename = "temp/1_HCLG.fst"
     try:
         devnull = open(os.devnull, 'wb')
+        # print([MKGRAPH_PATH,
+        #                 proto_langdir,
+        #                 txt_fst_file.name,
+        #                 hclg_filename])
         subprocess.check_output([MKGRAPH_PATH,
                         proto_langdir,
                         txt_fst_file.name,
