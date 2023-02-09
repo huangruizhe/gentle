@@ -1,6 +1,5 @@
 import argparse
 import logging
-import multiprocessing
 import os
 import sys
 from tqdm import tqdm
@@ -10,9 +9,6 @@ import lhotse
 
 parser = argparse.ArgumentParser(
         description='Align a transcript to audio by generating a new language model.  Outputs JSON')
-parser.add_argument(
-        '--nthreads', default=multiprocessing.cpu_count(), type=int,
-        help='number of alignment threads')
 parser.add_argument(
         '-o', '--output', metavar='output', type=str, 
         help='output filename')
@@ -82,9 +78,9 @@ for icut, cut in enumerate(cuts):
     duration = cut.supervisions[0].duration + 2 * args.margin
     
     with gentle.resampled(audiofile, offset=offset, duration=duration) as wavfile:
-        logging.info(f" ========== {icut}/{len(cuts)} {cut.supervisions[0].id} ==========")
+        logging.info(f" ========== {icut}/{len(cuts)} {cut.supervisions[0].id} offset={offset} dur={duration} ==========")
         logging.info("starting alignment")
-        aligner = gentle.ForcedAligner(resources, transcript, nthreads=args.nthreads, disfluency=args.disfluency, conservative=args.conservative, disfluencies=disfluencies)
+        aligner = gentle.ForcedAligner(resources, transcript, disfluency=args.disfluency, conservative=args.conservative, disfluencies=disfluencies)
         result = aligner.transcribe(wavfile, progress_cb=on_progress, logging=logging)
 
     output_dir = f"{args.output}/{recording_id}"

@@ -90,9 +90,11 @@ def realign(wavfile, alignment, ms, resources, nthreads=4, progress_cb=None):
         if progress_cb is not None:
             progress_cb({"percent": len(realignments) / float(len(to_realign))})
 
-    pool = Pool(nthreads)
-    pool.map(realign, to_realign)
-    pool.close()
+    # pool = Pool(nthreads)
+    # pool.map(realign, to_realign)
+    # pool.close()
+    for x in to_realign:
+        realign(x)
 
     # Sub in the replacements
     o_words = alignment
