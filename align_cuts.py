@@ -58,6 +58,7 @@ logging.info("converting audio to 8K sampled wav")
 
 job_id, total_jobs = list(map(int, args.jobs.split(":")))
 
+total_processed = 0
 for icut, cut in enumerate(cuts):
     if (icut % total_jobs) + 1 != job_id:
         continue
@@ -78,7 +79,7 @@ for icut, cut in enumerate(cuts):
     duration = cut.supervisions[0].duration + 2 * args.margin
     
     with gentle.resampled(audiofile, offset=offset, duration=duration) as wavfile:
-        logging.info(f" ========== {icut}/{len(cuts)} {cut.supervisions[0].id} offset={offset} dur={duration} ==========")
+        logging.info(f" ========== {icut}/{len(cuts)}:{total_processed} {cut.supervisions[0].id} offset={offset} dur={duration} ==========")
         logging.info("starting alignment")
         aligner = gentle.ForcedAligner(resources, transcript, disfluency=args.disfluency, conservative=args.conservative, disfluencies=disfluencies)
         result = aligner.transcribe(wavfile, progress_cb=on_progress, logging=logging)
@@ -89,5 +90,9 @@ for icut, cut in enumerate(cuts):
     output = f"{output_dir}/{uid}.json"
     fh = open(output, 'w', encoding="utf-8") if args.output else sys.stdout
     fh.write(result.to_json(indent=2))
+
+    total_processed += 1
 #     if args.output:
 #         logging.info("output written to %s" % (output))
+
+logging.info(f"Done: {total_processed} processed")
